@@ -13,18 +13,116 @@ namespace dvars
 {
 	namespace
 	{
+		std::atomic_bool dvar_write_scheduled{false};
 		bool initial_config_read = false;
-		utils::hook::detour dvar_register_new_hook;
 		utils::hook::detour dvar_set_variant_hook;
 
-		utils::hook::detour set_config_dvar_hook;
-		utils::hook::detour for_each_name_match_hook;
-		utils::hook::detour get_debug_name_hook;
+		void dvar_for_each_name_stub(void (*callback)(const char*))
+		{
+			for (int i = 0; i < *game::g_dvarCount; ++i)
+			{
+				const auto offset = game::is_server() ? 136 : 160;
+				const auto* dvar = reinterpret_cast<game::dvar_t*>(&game::s_dvarPool[offset * i]);
 
+				if (dvar->debugName //
+					&& (dvar->flags & 0x8000) == 0 //
+					&& (!game::Com_SessionMode_IsMode(game::MODE_COUNT)
+						|| !game::Dvar_IsSessionModeBaseDvar(dvar)))
+				{
+					callback(dvar->debugName);
+				}
+			}
+		}
 
-		const std::string get_config_file_path()
+		void dvar_for_each_name_client_num_stub(int localClientNum, void (*callback)(int, const char*))
+		{
+			for (int i = 0; i < *game::g_dvarCount; ++i)
+			{
+				const auto offset = game::is_server() ? 136 : 160;
+				const auto* dvar = reinterpret_cast<game::dvar_t*>(&game::s_dvarPool[offset * i]);
+
+				if (dvar->debugName //
+					&& (dvar->flags & 0x8000) == 0 //
+					&& (!game::Com_SessionMode_IsMode(game::MODE_COUNT)
+						|| !game::Dvar_IsSessionModeBaseDvar(dvar)))
+				{
+					callback(localClientNum, dvar->debugName);
+				}
+			}
+		}
+
+		void read_dvar_name_hashes_data(std::unordered_map<std::uint32_t, std::string>& map)
+		{
+			const auto path = game::get_appdata_path() / "data/lookup_tables/dvar_list.txt";
+			std::string data;
+
+			if (!utils::io::read_file(path, &data))
+			{
+				printf("Failed to read Dvar lookup table\n");
+				return;
+			}
+
+			const auto [beg, end] = std::ranges::remove(data, '\r');
+			data.erase(beg, end);
+
+			std::istringstream stream(data);
+			std::string debug_name;
+
+			while (std::getline(stream, debug_name, '\n'))
+			{
+				if (utils::string::starts_with(debug_name, "//"))
+				{
+					continue;
+				}
+
+				if (!debug_name.empty())
+				{
+					map.emplace(game::Dvar_GenerateHash(debug_name.data()), debug_name);
+				}
+			}
+		}
+
+		void copy_dvar_names_to_pool()
+		{
+			std::unordered_map<std::uint32_t, std::string> dvar_hash_name_map;
+			read_dvar_name_hashes_data(dvar_hash_name_map);
+
+			for (int i = 0; i < *game::g_dvarCount; ++i)
+			{
+				const auto offset = game::is_server() ? 136 : 160;
+				auto* dvar = reinterpret_cast<game::dvar_t*>(&game::s_dvarPool[offset * i]);
+
+				if (!dvar->debugName)
+				{
+					const auto it = dvar_hash_name_map.find(dvar->name);
+					if (it != dvar_hash_name_map.end())
+					{
+						dvar->debugName = game::CopyString(it->second.data());
+					}
+				}
+			}
+		}
+
+		std::string get_config_file_path()
 		{
 			return "players/user/config.cfg";
+		}
+
+		bool is_archive_dvar(const game::dvar_t* dvar)
+		{
+			if (!dvar->debugName)
+			{
+				return false;
+			}
+
+			//TODO: Fix archive dvars not stripping names from registered dvars
+			if (dvar->debugName == "cg_enable_unsafe_lua_functions"s ||
+			    dvar->debugName == "cg_unlockall_loot"s)
+			{
+				return true;
+			}
+			
+			return (dvar->flags & game::DVAR_ARCHIVE);
 		}
 
 		void write_archive_dvars()
@@ -35,28 +133,46 @@ namespace dvars
 			{
 				const auto* dvar = reinterpret_cast<const game::dvar_t*>(&game::s_dvarPool[160 * i]);
 
-				if (!dvar->debugName)
+				if (!is_archive_dvar(dvar))
+				{
 					continue;
+				}
 
-				auto name = dvar->debugName;
-				auto value = game::Dvar_DisplayableValue(dvar);
+				const auto name = dvar->debugName;
+				const auto value = game::Dvar_DisplayableValue(dvar);
 
 				config_buffer.append(utils::string::va("set %s \"%s\"\n", name, value));
 			}
 
 			if (config_buffer.length() == 0)
+			{
 				return;
+			}
 
 			utils::io::write_file(get_config_file_path(), config_buffer);
+		}
+
+		void schedule_dvar_write()
+		{
+			if (dvar_write_scheduled.exchange(true))
+			{
+				return;
+			}
+
+			scheduler::once([]
+			{
+				dvar_write_scheduled = false;
+				write_archive_dvars();
+			}, scheduler::main, 10s);
 		}
 
 		void dvar_set_variant_stub(game::dvar_t* dvar, game::DvarValue* value, unsigned int source)
 		{
 			dvar_set_variant_hook.invoke(dvar, value, source);
 
-			if (initial_config_read && dvar->debugName)
+			if (initial_config_read && is_archive_dvar(dvar))
 			{
-				write_archive_dvars();
+				schedule_dvar_write();
 			}
 		}
 
@@ -79,14 +195,29 @@ namespace dvars
 		}
 	}
 
-	class component final : public client_component
+	class component final : public generic_component
 	{
 	public:
 		void post_unpack() override
 		{
-			scheduler::once(read_archive_dvars, scheduler::pipeline::main);
+			if (!game::is_server())
+			{
+				scheduler::once(read_archive_dvars, scheduler::pipeline::main);
+				dvar_set_variant_hook.create(0x1422C9A90_g, dvar_set_variant_stub);
 
-			dvar_set_variant_hook.create(0x1422C9A90_g, dvar_set_variant_stub);
+				// Show all known dvars in console
+				utils::hook::jump(0x1422BD890_g, dvar_for_each_name_stub);
+				utils::hook::jump(0x1422BD7E0_g, dvar_for_each_name_client_num_stub);
+			}
+
+			scheduler::once(copy_dvar_names_to_pool, scheduler::pipeline::main);
+
+			// All dvars are recognized as command
+			utils::hook::nop(game::select(0x14215297A, 0x14050949A), 2);
+			// Show all dvars in dvarlist command
+			utils::hook::nop(game::select(0x142152C87, 0x140509797), 6);
+			// Show all dvars in dvardump command
+			utils::hook::nop(game::select(0x142152659, 0x140509179), 6);
 		}
 	};
 }

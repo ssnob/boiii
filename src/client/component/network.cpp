@@ -14,6 +14,8 @@ namespace network
 {
 	namespace
 	{
+		utils::hook::detour handle_packet_internal_hook{};
+
 		std::unordered_map<std::string, callback>& get_callbacks()
 		{
 			static std::unordered_map<std::string, callback> callbacks{};
@@ -76,6 +78,9 @@ namespace network
 				throw std::runtime_error("Unable to create socket");
 			}
 
+			constexpr char broadcast = 1;
+			setsockopt(s, SOL_SOCKET, SO_BROADCAST, &broadcast, sizeof(broadcast));
+
 			socket_set_blocking(s, false);
 
 			const auto address = htonl(INADDR_ANY);
@@ -126,6 +131,17 @@ namespace network
 		void con_restricted_execute_buf_stub(int local_client_num, game::ControllerIndex_t controller_index, const char* buffer)
 		{
 			game::Cbuf_ExecuteBuffer(local_client_num, controller_index, buffer);
+		}
+
+		uint64_t handle_packet_internal_stub(const game::ControllerIndex_t controller_index, const game::netadr_t from_adr, const game::XUID from_xuid,
+		                                     const game::LobbyType lobby_type, const uint64_t dest_module, game::msg_t* msg)
+		{
+			if (from_adr.type != game::NA_LOOPBACK)
+			{
+				return 0;
+			}
+
+			return handle_packet_internal_hook.invoke<bool>(controller_index, from_adr, from_xuid, lobby_type, dest_module, msg) ? 1 : 0;
 		}
 	}
 
@@ -241,11 +257,14 @@ namespace network
 			if (game::is_server())
 			{
 				// Remove restrictions for rcon commands
-				utils::hook::call(0x140538D5C_g, con_restricted_execute_buf_stub); // SVC_RemoteCommand
+				utils::hook::call(0x140538D5C_g, &con_restricted_execute_buf_stub); // SVC_RemoteCommand
 			}
 
 			// TODO: Fix that
 			scheduler::once(create_ip_socket, scheduler::main);
+
+			// Kill lobby system
+			handle_packet_internal_hook.create(game::select(0x141EF8030, 0x1404A5B90), &handle_packet_internal_stub);
 		}
 	};
 }

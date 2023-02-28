@@ -78,6 +78,11 @@ namespace getinfo
 		return (rand() % 2) + 1;
 	}
 
+	bool is_host()
+	{
+		return game::SV_Loaded() && (game::is_server() || !game::Com_IsRunningUILevel());
+	}
+
 	struct component final : generic_component
 	{
 		void post_unpack() override

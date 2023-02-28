@@ -7,7 +7,7 @@
 
 # BOIII ☄️
 
-Reverse engineering and analysis of Call of Duty: Black Ops 3. Very experimental.
+Reverse engineering and analysis of Call of Duty: Black Ops 3.
 
 <img src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQeSXYzQITJrcjiifN1nqX1fsVE7VwLZ3vl2g&usqp=CAU">
 
@@ -23,6 +23,15 @@ Reverse engineering and analysis of Call of Duty: Black Ops 3. Very experimental
 - [x] Process wrapper
 - [x] P2P multiplayer
 - [x] Dedicated Servers
+
+## Writeups & Articles
+
+- <a href="https://momo5502.com/posts/2022-11-17-reverse-engineering-integrity-checks-in-black-ops-3/">Reverse engineering integrity checks in Black Ops 3</a>
+- <a href="https://techcrunch.com/2023/02/28/gamers-are-fixing-a-video-game-taken-over-by-hackers/">Gamers are fixing a video game ‘taken over’ by hackers</a>
+
+## Credits
+
+- Thanks to <a href="https://github.com/shiversoftdev">@shiversoftdev</a> for providing the fixes from his <a href="https://github.com/shiversoftdev/t7patch">community patch</a>
 
 ## Disclaimer
 

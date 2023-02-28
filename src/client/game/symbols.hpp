@@ -19,7 +19,7 @@ namespace game
 
 	// Com
 	WEAK symbol<void(int channel, unsigned int label, const char* fmt, ...)> Com_Printf{0x1421499C0, 0x140505630};
-	WEAK symbol<void(const char* file, int line, int code, const char* fmt, ...)> Com_Error_{0x1420F8BD0};
+	WEAK symbol<void(const char* file, int line, int code, const char* fmt, ...)> Com_Error_{0x1420F8BD0, 0x140501470};
 	WEAK symbol<bool(eModes mode)> Com_SessionMode_IsMode{0x1420F7DD0};
 	WEAK symbol<void(eNetworkModes networkMode)> Com_SessionMode_SetNetworkMode{0x1420F8010, 0x140500B80};
 	WEAK symbol<eGameModes(eGameModes gameMode)> Com_SessionMode_SetGameMode{0x1420F7FD0, 0x140500B40};
@@ -78,9 +78,13 @@ namespace game
 	WEAK symbol<TLSData*()> Sys_GetTLS{0x142184210, 0x140525EB0};
 	WEAK symbol<TLSData*()> Sys_IsDatabaseReady{0x1421844C0};
 
+	// Unnamed
+	WEAK symbol<const char* (const char* name)> CopyString{0x1422ACC80, 0x14056BD70};
+
 	// Dvar
+	WEAK symbol<bool(const dvar_t* dvar)> Dvar_IsSessionModeBaseDvar{0x1422C2E00, 0x140576890};
 	WEAK symbol<dvar_t*(const char* dvarName)> Dvar_FindVar{0x1422BD730, 0x140575540};
-	WEAK symbol<unsigned int(const char* str)> Dvar_GenerateHash{0x14133DBF0};
+	WEAK symbol<unsigned int(const char* str)> Dvar_GenerateHash{0x14133DBF0, 0x140185800};
 	WEAK symbol<dvar_t*(unsigned int hash)> Dvar_FindMalleableVar{0x1422BD6A0};
 	WEAK symbol<const char*(const dvar_t* dvar)> Dvar_GetDebugName{0x1422BDCB0};
 	WEAK symbol<const char*(const dvar_t* dvar)> Dvar_GetString{0x1422BFFF0, 0x140575E30};
@@ -93,8 +97,6 @@ namespace game
 	WEAK symbol<void(const char* dvarName, const char* string, bool createIfMissing)> Dvar_SetFromStringByName{
 		0x1422C7F60
 	};
-	WEAK symbol<char> s_dvarPool{0x157AC8220};
-	WEAK symbol<int> g_dvarCount{0x157AC81CC};
 
 	// UI
 	WEAK symbol<void(bool frontend)> UI_CoD_Init{0x141F298B0, 0x0};
@@ -127,12 +129,16 @@ namespace game
 	};
 
 	// SV
+	WEAK symbol<bool()> SV_Loaded{0x142252CB0, 0x140535460};
 	WEAK symbol<void*()> SV_AddTestClient{0x1422499A0, 0x14052E3E0};
 	WEAK symbol<void(client_s* cl_0, svscmd_type type, const char* fmt, ...)> SV_SendServerCommand{0x0, 0x140537F10};
 	WEAK symbol<bool(int clientNum)> SV_IsTestClient{0x14224B5C0, 0x14052FF40};
+	WEAK symbol<void(int controllerIndex, const char* server, MapPreload preload, bool savegame)> SV_SpawnServer{0x142253320, 0x140535B20};
+
+	// Utils
+	WEAK symbol<const char* (char* str)> I_CleanStr{0x1422E9C10, 0x140580E80};
 
 	// Variables
-
 	WEAK symbol<cmd_function_s> cmd_functions{0x15689FF58, 0x14946F860};
 	WEAK symbol<CmdArgs> sv_cmd_args{0x15689CE30, 0x14944C740};
 
@@ -143,6 +149,9 @@ namespace game
 	WEAK symbol<SOCKET> ip_socket{0x157E77818, 0x14A640988};
 
 	WEAK symbol<Join> s_join{0x15574C640};
+
+	WEAK symbol<char> s_dvarPool{0x157AC8220, 0x14A3CB620};
+	WEAK symbol<int> g_dvarCount{0x157AC81CC, 0x14A3CB5FC};
 
 	namespace s_wcd
 	{
